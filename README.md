@@ -103,7 +103,7 @@ Add a region code to list the courses from that region:
 
 The second option can be a year e.g "1999", or a range of years e.g "2005-2015".
 
-The final option is the racing code and can either be "flat" or "jumps".
+The final option is the racing code and can be "flat", "jumps", or "all". If you omit it, "all" is used.
 
 ### Examples
 
@@ -173,7 +173,7 @@ Only races from GB will be scraped.
 ./rpscrape.py -d 2020/10/01 -r gb
 ```
 
-To scrape a particular course or region, use the -c or -r flags with the course or region code. Use the -y flag for the year and -t flag for the type of racing, flat or jumps.
+To scrape a particular course or region, use the -c or -r flags with the course or region code. Use the -y flag for the year and -t flag for the type of racing (flat, jumps, or all). If -t is omitted, all is assumed.
 
 ```
 ./rpscrape.py -c 2 -y 2015-2020 -t jumps

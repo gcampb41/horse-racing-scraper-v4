@@ -46,7 +46,7 @@ INFO = {
     'course': 'Course code. 1 to 4 digit code - e.g 20',
     'region': 'Region code. 2 or 3 letter e.g ire',
     'year': 'Year or range of years. Format YYYY - e.g 2018 or 2019-2020',
-    'type': 'Race type flat|jumps',
+    'type': 'Race type flat|jumps|all',
 }
 
 
@@ -59,7 +59,7 @@ ERROR = {
     'invalid_date': 'Invalid date. Format:\n\t\t-d YYYY/MM/DD\n\nExamples:\n\t\t-d 2020/01/19\n\t\t2020/01/19-2020/01/29',
     'invalid_region': 'Invalid Region code. \n\nExamples:\n\t\t-r gb\n\t\t-r ire',
     'invalid_region_int': 'Invalid Region code. \n\nExamples:\n\t\t2020/01/19 gb\n\t\t2021/07/11 ire',
-    'invalid_type': 'Invalid type.\n\nMust be either flat or jumps.\n\nExamples:\n\t\t-t flat\n\t\t-t jumps',
+    'invalid_type': 'Invalid type.\n\nMust be either flat, jumps, or all.\n\nExamples:\n\t\t-t flat\n\t\t-t jumps\n\t\t-t all',
     'invalid_year': 'Invalid year.\n\nFormat:\n\t\tYYYY\n\nExamples:\n\t\t-y 2015\n\t\t-y 2012-2017',
     'invalid_year_int': 'Invalid year. Must be in range 1988-',
 }
@@ -123,11 +123,11 @@ class ArgParser:
 
             self.years = years
 
-        if args.type and args.type not in {'flat', 'jumps'}:
+        if args.type and args.type not in {'flat', 'jumps', 'all'}:
             self.parser.error(ERROR['invalid_type'])
 
         if not args.type:
-            args.type = ''
+            args.type = 'all'
 
         return args
 
@@ -185,7 +185,7 @@ class ArgParser:
         return parsed
 
     def get_racing_type(self, code: str) -> str | None:
-        mapping = {'j': 'jumps', 'f': 'flat'}
+        mapping = {'j': 'jumps', 'f': 'flat', 'a': 'all'}
         key = code.lower().lstrip('-')[0]
         return mapping.get(key, None)
 
@@ -225,7 +225,7 @@ class ArgParser:
         parsed['dates'] = get_dates(date_input)
         parsed['folder_name'] = 'dates/'
         parsed['file_name'] = date_input.replace('/', '-')
-        parsed['type'] = ''
+        parsed['type'] = 'all'
 
         if len(args) >= 3:
             region = args[2]

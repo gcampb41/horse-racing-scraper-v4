@@ -95,6 +95,7 @@ def scrape_races(
     csv_header: str,
     fetch_betfair: bool,
     jobs: int,
+    log_path: Path | None,
 ):
     out_dir = Path('../data') / folder_name / code
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -128,14 +129,14 @@ def scrape_races(
     jobs = max(1, min(10, jobs))
     print(f'Scraping {total} races with {jobs} worker(s)...')
 
-    def process(idx: int, url: str) -> tuple[int, list[str]]:
+    def process(idx: int, url: str) -> tuple[int, list[str], str | None]:
         print(f'[{idx}/{total}] Fetching {url}', flush=True)
 
         try:
             resp = requests.get(url, headers=random_header.header())
         except Exception as exc:
             print(f'  ! Request failed: {exc}', flush=True)
-            return idx, []
+            return idx, [], f'{url} | request failed | {exc}'
 
         doc = html.fromstring(resp.content)
 
@@ -146,25 +147,29 @@ def scrape_races(
                 race = Race(url, doc, code, fields)
         except VoidRaceError:
             print('  ! Skipping void race', flush=True)
-            return idx, []
+            return idx, [], f'{url} | void race'
         except Exception as exc:  # Catch parse errors and continue
             print(f'  ! Failed to parse race: {exc}', flush=True)
-            return idx, []
+            return idx, [], f'{url} | parse failed | {exc}'
 
         if code == 'flat' and race.race_info.r_type != 'Flat':
             print('  ! Skipping non-flat race', flush=True)
-            return idx, []
+            return idx, [], f'{url} | non-flat race for flat code'
         if code == 'jumps' and race.race_info.r_type not in {'Chase', 'Hurdle', 'NH Flat'}:
             print('  ! Skipping non-jumps race', flush=True)
-            return idx, []
+            return idx, [], f'{url} | non-jumps race for jumps code'
 
-        return idx, race.csv_data
+        return idx, race.csv_data, None
 
     results: list[tuple[int, list[str]]] = []
     with ThreadPoolExecutor(max_workers=jobs) as executor:
         future_map = {executor.submit(process, idx, url): idx for idx, url in enumerate(race_urls, start=1)}
         for future in as_completed(future_map):
-            results.append(future.result())
+            idx, rows, err = future.result()
+            results.append((idx, rows))
+            if err and log_path:
+                with log_path.open('a', encoding='utf-8') as lf:
+                    _ = lf.write(err + '\n')
 
     results.sort(key=lambda x: x[0])
 
@@ -207,10 +212,40 @@ def main():
 
         if args.date and args.region:
             folder_name = f'dates/{args.region}'
+            # One log file for the whole run
+            log_file = Path('../data') / folder_name / f'{args.region}-{args.date.replace("/", "-")}-log-file.txt'
+
+            codes = ['flat', 'jumps'] if args.type == 'all' else [args.type]
             for race_date in parser.dates:
-                file_name = f'{args.region}-{race_date.isoformat()}'
-                race_urls = get_race_urls_date([race_date], args.region)
-                fetch_betfair = settings.toml.get('betfair_data', False) and race_date >= date(2024, 2, 1)
+                for code in codes:
+                    file_name = f'{args.region}-{race_date.isoformat()}'
+                    race_urls = get_race_urls_date([race_date], args.region)
+                    fetch_betfair = settings.toml.get('betfair_data', False) and race_date >= date(2024, 2, 1)
+                    fields = settings.get_fields(include_betfair=True)
+                    csv_header = ','.join(fields)
+
+                    scrape_races(
+                        race_urls,
+                        folder_name,
+                        file_name,
+                        file_extension,
+                        code,
+                        file_writer,
+                        fields,
+                        csv_header,
+                        fetch_betfair,
+                        parser.jobs,
+                        log_file,
+                    )
+        else:
+            folder_name = args.region or course_name(args.course)
+            file_name = args.year
+            log_file = Path('../data') / folder_name / f'{file_name}-log-file.txt'
+            codes = ['flat', 'jumps'] if args.type == 'all' else [args.type]
+
+            for code in codes:
+                race_urls = get_race_urls(parser.tracks, parser.years, code)
+                fetch_betfair = settings.toml.get('betfair_data', False)
                 fields = settings.get_fields(include_betfair=True)
                 csv_header = ','.join(fields)
 
@@ -219,33 +254,14 @@ def main():
                     folder_name,
                     file_name,
                     file_extension,
-                    args.type,
+                    code,
                     file_writer,
                     fields,
                     csv_header,
                     fetch_betfair,
                     parser.jobs,
+                    log_file,
                 )
-        else:
-            folder_name = args.region or course_name(args.course)
-            file_name = args.year
-            race_urls = get_race_urls(parser.tracks, parser.years, args.type)
-            fetch_betfair = settings.toml.get('betfair_data', False)
-            fields = settings.get_fields(include_betfair=True)
-            csv_header = ','.join(fields)
-
-            scrape_races(
-                race_urls,
-                folder_name,
-                file_name,
-                file_extension,
-                args.type,
-                file_writer,
-                fields,
-                csv_header,
-                fetch_betfair,
-                parser.jobs,
-            )
     else:
         if sys.platform == 'linux':
             import readline
@@ -263,43 +279,60 @@ def main():
                     region = args.get('region', '')
                     folder_name = args['folder_name']
 
+                    # One log file per interactive run
+                    if args['dates']:
+                        start = args['dates'][0].isoformat()
+                        end = args['dates'][-1].isoformat()
+                        base = f'{region}-{"-to-".join({start, end})}' if start != end else f'{region}-{start}'
+                    else:
+                        base = region or 'dates'
+                    log_file = Path('../data') / folder_name / f'{base}-log-file.txt'
+
+                    codes = ['flat', 'jumps'] if args['type'] == 'all' else [args['type']]
                     for race_date in args['dates']:
                         file_name = f'{region}-{race_date.isoformat()}' if region else race_date.isoformat()
-                        race_urls = get_race_urls_date([race_date], region)
-                        fetch_betfair = settings.toml.get('betfair_data', False) and race_date >= date(2024, 2, 1)
+                        for code in codes:
+                            race_urls = get_race_urls_date([race_date], region)
+                            fetch_betfair = settings.toml.get('betfair_data', False) and race_date >= date(2024, 2, 1)
+                            fields = settings.get_fields(include_betfair=True)
+                            csv_header = ','.join(fields)
+
+                            scrape_races(
+                                race_urls,
+                                folder_name,
+                                file_name,
+                                file_extension,
+                                code,
+                                file_writer,
+                                fields,
+                                csv_header,
+                                fetch_betfair,
+                                parser.jobs,
+                                log_file,
+                            )
+                else:
+                    codes = ['flat', 'jumps'] if args['type'] == 'all' else [args['type']]
+                    log_file = Path('../data') / args['folder_name'] / f'{args["file_name"]}-log-file.txt'
+
+                    for code in codes:
+                        race_urls = get_race_urls(args['tracks'], args['years'], code)
+                        fetch_betfair = settings.toml.get('betfair_data', False)
                         fields = settings.get_fields(include_betfair=True)
                         csv_header = ','.join(fields)
 
                         scrape_races(
                             race_urls,
-                            folder_name,
-                            file_name,
+                            args['folder_name'],
+                            args['file_name'],
                             file_extension,
-                            args['type'],
+                            code,
                             file_writer,
                             fields,
                             csv_header,
                             fetch_betfair,
                             parser.jobs,
+                            log_file,
                         )
-                else:
-                    race_urls = get_race_urls(args['tracks'], args['years'], args['type'])
-                    fetch_betfair = settings.toml.get('betfair_data', False)
-                    fields = settings.get_fields(include_betfair=True)
-                    csv_header = ','.join(fields)
-
-                    scrape_races(
-                        race_urls,
-                        args['folder_name'],
-                        args['file_name'],
-                        file_extension,
-                        args['type'],
-                        file_writer,
-                        fields,
-                        csv_header,
-                        fetch_betfair,
-                        parser.jobs,
-                    )
 
 
 if __name__ == '__main__':
