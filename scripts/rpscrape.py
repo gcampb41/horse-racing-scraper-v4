@@ -5,6 +5,7 @@ import requests
 import sys
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TextIO
 from lxml import html
@@ -93,6 +94,7 @@ def scrape_races(
     fields: list[str],
     csv_header: str,
     fetch_betfair: bool,
+    jobs: int,
 ):
     out_dir = Path('../data') / folder_name / code
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -123,42 +125,53 @@ def scrape_races(
         print('No races found to scrape.')
         return
 
-    print(f'Scraping {total} races...')
+    jobs = max(1, min(10, jobs))
+    print(f'Scraping {total} races with {jobs} worker(s)...')
+
+    def process(idx: int, url: str) -> tuple[int, list[str]]:
+        print(f'[{idx}/{total}] Fetching {url}', flush=True)
+
+        try:
+            resp = requests.get(url, headers=random_header.header())
+        except Exception as exc:
+            print(f'  ! Request failed: {exc}', flush=True)
+            return idx, []
+
+        doc = html.fromstring(resp.content)
+
+        try:
+            if betfair:
+                race = Race(url, doc, code, fields, betfair.data)
+            else:
+                race = Race(url, doc, code, fields)
+        except VoidRaceError:
+            print('  ! Skipping void race', flush=True)
+            return idx, []
+        except Exception as exc:  # Catch parse errors and continue
+            print(f'  ! Failed to parse race: {exc}', flush=True)
+            return idx, []
+
+        if code == 'flat' and race.race_info.r_type != 'Flat':
+            print('  ! Skipping non-flat race', flush=True)
+            return idx, []
+        if code == 'jumps' and race.race_info.r_type not in {'Chase', 'Hurdle', 'NH Flat'}:
+            print('  ! Skipping non-jumps race', flush=True)
+            return idx, []
+
+        return idx, race.csv_data
+
+    results: list[tuple[int, list[str]]] = []
+    with ThreadPoolExecutor(max_workers=jobs) as executor:
+        future_map = {executor.submit(process, idx, url): idx for idx, url in enumerate(race_urls, start=1)}
+        for future in as_completed(future_map):
+            results.append(future.result())
+
+    results.sort(key=lambda x: x[0])
 
     with file_writer(str(file_path)) as f:
         _ = f.write(csv_header + '\n')
-
-        for idx, url in enumerate(race_urls, start=1):
-            print(f'[{idx}/{total}] Fetching {url}', flush=True)
-
-            try:
-                resp = requests.get(url, headers=random_header.header())
-            except Exception as exc:
-                print(f'  ! Request failed: {exc}', flush=True)
-                continue
-
-            doc = html.fromstring(resp.content)
-
-            try:
-                if betfair:
-                    race = Race(url, doc, code, fields, betfair.data)
-                else:
-                    race = Race(url, doc, code, fields)
-            except VoidRaceError:
-                print('  ! Skipping void race', flush=True)
-                continue
-            except Exception as exc:  # Catch parse errors and continue
-                print(f'  ! Failed to parse race: {exc}', flush=True)
-                continue
-
-            if code == 'flat' and race.race_info.r_type != 'Flat':
-                print('  ! Skipping non-flat race', flush=True)
-                continue
-            if code == 'jumps' and race.race_info.r_type not in {'Chase', 'Hurdle', 'NH Flat'}:
-                print('  ! Skipping non-jumps race', flush=True)
-                continue
-
-            for row in race.csv_data:
+        for _, rows in results:
+            for row in rows:
                 _ = f.write(row + '\n')
 
     rel_path = file_path.relative_to('../')
@@ -211,6 +224,7 @@ def main():
                     fields,
                     csv_header,
                     fetch_betfair,
+                    parser.jobs,
                 )
         else:
             folder_name = args.region or course_name(args.course)
@@ -230,6 +244,7 @@ def main():
                 fields,
                 csv_header,
                 fetch_betfair,
+                parser.jobs,
             )
     else:
         if sys.platform == 'linux':
@@ -265,6 +280,7 @@ def main():
                             fields,
                             csv_header,
                             fetch_betfair,
+                            parser.jobs,
                         )
                 else:
                     race_urls = get_race_urls(args['tracks'], args['years'], args['type'])
@@ -282,6 +298,7 @@ def main():
                         fields,
                         csv_header,
                         fetch_betfair,
+                        parser.jobs,
                     )
 
 

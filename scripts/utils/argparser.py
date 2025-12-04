@@ -70,6 +70,7 @@ class ArgParser:
         self.dates: list[date] = []
         self.tracks: list[tuple[str, str]] = []
         self.years: list[str] = []
+        self.jobs: int = 1
         self.parser: ArgumentParser = ArgumentParser()
         self.add_arguments()
 
@@ -79,9 +80,12 @@ class ArgParser:
         _ = self.parser.add_argument('-r', '--region', metavar='', type=str, help=INFO['region'])
         _ = self.parser.add_argument('-y', '--year', metavar='', type=str, help=INFO['year'])
         _ = self.parser.add_argument('-t', '--type', metavar='', type=str, help=INFO['type'])
+        _ = self.parser.add_argument('-j', '--jobs', metavar='', type=int, default=1, help='Concurrent workers (1-10)')
 
     def parse_args(self, arg_list: list[str]):
         args = self.parser.parse_args(args=arg_list)
+
+        self.jobs = max(1, min(10, args.jobs))
 
         if args.date:
             if any([args.course, args.year]):
