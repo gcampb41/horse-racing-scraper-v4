@@ -2,9 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from orjson import dumps
-from typing import Any
-
-type BSPMap = dict[tuple[str, str, str], list[BSP]]
+from typing import Any, Dict, List, Tuple
 
 
 @dataclass
@@ -60,6 +58,8 @@ class BSP:
             pre_vol=record.get('pptradedvol'),
             ip_vol=record.get('iptradedvol'),
         )
+
+BSPMap = Dict[Tuple[str, str, str], List[BSP]]
 
 
 def clean_name(name: str, region: str) -> str:
