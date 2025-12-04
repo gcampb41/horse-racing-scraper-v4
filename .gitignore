@@ -1,9 +1,27 @@
+# Local data and outputs
 data/
 racecards/
+
+# IDE settings
 .idea/
 .vscode/
+
+# Python environment
+.venv/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# MacOS system file
+.DS_Store
+
+# Ignore anything ending in "__" (common temp dirs)
 __*/
 
-.DS_Store
+# User-specific settings (never commit)
 settings/user_settings.toml
 
+# Log files
+*.log
