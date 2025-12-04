@@ -3,6 +3,7 @@
 import gzip
 import requests
 import sys
+import time
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -132,8 +133,9 @@ def scrape_races(
     def process(idx: int, url: str) -> tuple[int, list[str], str | None]:
         print(f'[{idx}/{total}] Fetching {url}', flush=True)
 
+        start = time.monotonic()
         try:
-            resp = requests.get(url, headers=random_header.header())
+            resp = requests.get(url, headers=random_header.header(), timeout=20)
         except Exception as exc:
             print(f'  ! Request failed: {exc}', flush=True)
             return idx, [], f'{url} | request failed | {exc}'
@@ -154,10 +156,13 @@ def scrape_races(
 
         if code == 'flat' and race.race_info.r_type != 'Flat':
             print('  ! Skipping non-flat race', flush=True)
-            return idx, [], f'{url} | non-flat race for flat code'
+            return idx, [], None
         if code == 'jumps' and race.race_info.r_type not in {'Chase', 'Hurdle', 'NH Flat'}:
             print('  ! Skipping non-jumps race', flush=True)
-            return idx, [], f'{url} | non-jumps race for jumps code'
+            return idx, [], None
+
+        duration = time.monotonic() - start
+        print(f'[{idx}/{total}] Completed in {duration:.1f}s ({len(race.csv_data)} rows)', flush=True)
 
         return idx, race.csv_data, None
 
