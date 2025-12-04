@@ -78,14 +78,14 @@ class RunnerInfo:
     pre_vol: list[str] = field(default_factory=list)
     ip_vol: list[str] = field(default_factory=list)
 
-    def set_bsp_list_width(self, n: int):
-        self.bsp = [''] * n
-        self.wap = [''] * n
-        self.morning_wap = [''] * n
-        self.pre_min = [''] * n
-        self.pre_max = [''] * n
-        self.ip_min = [''] * n
-        self.ip_max = [''] * n
-        self.morning_vol = [''] * n
-        self.pre_vol = [''] * n
-        self.ip_vol = [''] * n
+    def set_bsp_list_width(self, n: int, fill: str = ''):
+        self.bsp = [fill] * n
+        self.wap = [fill] * n
+        self.morning_wap = [fill] * n
+        self.pre_min = [fill] * n
+        self.pre_max = [fill] * n
+        self.ip_min = [fill] * n
+        self.ip_max = [fill] * n
+        self.morning_vol = [fill] * n
+        self.pre_vol = [fill] * n
+        self.ip_vol = [fill] * n

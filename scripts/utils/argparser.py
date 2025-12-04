@@ -220,7 +220,7 @@ class ArgParser:
 
         parsed['dates'] = get_dates(date_input)
         parsed['folder_name'] = 'dates/'
-        parsed['file_name'] = date_input.replace('/', '_')
+        parsed['file_name'] = date_input.replace('/', '-')
         parsed['type'] = ''
 
         if len(args) >= 3:
@@ -228,6 +228,7 @@ class ArgParser:
             if valid_region(region):
                 parsed['region'] = region
                 parsed['folder_name'] += region
+                parsed['file_name'] = f'{region}-{parsed["file_name"]}'
             else:
                 print(ERROR['invalid_region_int'])
                 return {}

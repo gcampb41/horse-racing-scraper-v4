@@ -134,8 +134,24 @@ class Race:
 
         self.clean_non_completions()
 
+        betfair_fields = {
+            'bsp',
+            'wap',
+            'morning_wap',
+            'pre_min',
+            'pre_max',
+            'ip_min',
+            'ip_max',
+            'morning_vol',
+            'pre_vol',
+            'ip_vol',
+        }
+
         if bsp_map:
             self.join_betfair_data(bsp_map)
+        elif betfair_fields.intersection(fields):
+            # Ensure betfair columns exist with placeholder when data isn't fetched
+            self.runner_info.set_bsp_list_width(len(self.runner_info.horse), fill='not available')
 
         self.csv_data: list[str] = self.create_csv_data(fields)
 

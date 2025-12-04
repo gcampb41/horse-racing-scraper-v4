@@ -17,14 +17,17 @@ class Settings:
         self.fields = self.get_fields()
         self.csv_header = ','.join(self.fields)
 
-    def get_fields(self) -> list[str]:
+    def get_fields(self, include_betfair: bool | None = None) -> list[str]:
         fields: list[str] = []
 
         if self.toml is None:
             return fields
 
+        if include_betfair is None:
+            include_betfair = self.toml.get('betfair_data', False)
+
         for group in self.toml.get('fields', {}):
-            if group == 'betfair' and not self.toml.get('betfair_data', False):
+            if group == 'betfair' and not include_betfair:
                 continue
             for field, enabled in self.toml['fields'][group].items():
                 if enabled:
